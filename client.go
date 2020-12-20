@@ -32,10 +32,10 @@ type Client struct {
 	client *http.Client
 
 	// Base URL for API requests.
-	BaseURL *url.URL
+	baseURL *url.URL
 
 	// User agent for client
-	UserAgent string
+	userAgent string
 
 	// Auth token for authorization
 	authToken string
@@ -102,7 +102,7 @@ func NewClient(httpClient *http.Client) *Client {
 
 	baseURL, _ := url.Parse(defaultBaseURL)
 
-	c := &Client{client: httpClient, BaseURL: baseURL, UserAgent: userAgent}
+	c := &Client{client: httpClient, baseURL: baseURL, userAgent: userAgent}
 
 	c.LoginService = &loginService{client: c}
 	c.DigitalSigningService = &digitalSigningService{client: c}
@@ -113,7 +113,7 @@ func NewClient(httpClient *http.Client) *Client {
 // ClientOpt are options for New.
 type ClientOpt func(*Client) error
 
-// New returns a new DIgitalOcean API client instance.
+// New returns a new Globalsign API client instance.
 func New(httpClient *http.Client, opts ...ClientOpt) (*Client, error) {
 	c := NewClient(httpClient)
 	for _, opt := range opts {
@@ -133,7 +133,7 @@ func SetBaseURL(bu string) ClientOpt {
 			return err
 		}
 
-		c.BaseURL = u
+		c.baseURL = u
 		return nil
 	}
 }
@@ -141,7 +141,7 @@ func SetBaseURL(bu string) ClientOpt {
 // SetUserAgent is a client option for setting the user agent.
 func SetUserAgent(ua string) ClientOpt {
 	return func(c *Client) error {
-		c.UserAgent = fmt.Sprintf("%s %s", ua, c.UserAgent)
+		c.userAgent = fmt.Sprintf("%s %s", ua, c.userAgent)
 		return nil
 	}
 }
@@ -150,6 +150,7 @@ func SetUserAgent(ua string) ClientOpt {
 func (c *Client) SetAuthToken(token string) {
 	c.Lock()
 	defer c.Unlock()
+
 	c.authToken = token
 }
 
@@ -157,6 +158,7 @@ func (c *Client) SetAuthToken(token string) {
 func (c *Client) AuthToken() string {
 	c.Lock()
 	defer c.Unlock()
+
 	return c.authToken
 }
 
@@ -166,7 +168,7 @@ func (c *Client) AuthToken() string {
 func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body interface{}) (*http.Request, error) {
 	c.Lock()
 	defer c.Unlock()
-	u, err := c.BaseURL.Parse(urlStr)
+	u, err := c.baseURL.Parse(urlStr)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +188,7 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body int
 
 	req.Header.Add("Content-Type", contentType)
 	req.Header.Add("Accept", contentType)
-	req.Header.Add("User-Agent", c.UserAgent)
+	req.Header.Add("User-Agent", c.userAgent)
 
 	// if auth token is set
 	// then put token as Authorization header

@@ -19,7 +19,10 @@ const sigLen = 8192
 // GlobalsignDSS is custom unidoc sighandler which leverage
 // globalsign DSS service
 type GlobalsignDSS struct {
-	signedBy string
+	signer   string
+	identity map[string]interface{}
+
+	manager *globalsign.Manager
 
 	// a caller context
 	ctx context.Context
@@ -74,7 +77,9 @@ func (h *GlobalsignDSS) Validate(sig *model.PdfSignature, digest model.Hasher) (
 // InitSignature sets the PdfSignature parameters.
 func (h *GlobalsignDSS) InitSignature(sig *model.PdfSignature) error {
 	// request new identification based on signer
-	identity, err := globalsign.GetIdentity(h.ctx, h.signedBy)
+	identity, err := h.manager.GetIdentity(h.ctx, h.signer, &globalsign.IdentityRequest{
+		SubjectDn: h.identity,
+	})
 	if err != nil {
 		return err
 	}
@@ -82,7 +87,7 @@ func (h *GlobalsignDSS) InitSignature(sig *model.PdfSignature) error {
 	// create certificate chain
 	// from signing and ca cert
 	var certChain []*x509.Certificate
-	issuerCertData := []byte(identity.Identity.SigningCert)
+	issuerCertData := []byte(identity.SigningCert)
 	for len(issuerCertData) != 0 {
 		var block *pem.Block
 		block, issuerCertData = pem.Decode(issuerCertData)
@@ -98,7 +103,7 @@ func (h *GlobalsignDSS) InitSignature(sig *model.PdfSignature) error {
 		certChain = append(certChain, issuer)
 	}
 
-	caCertData := []byte(identity.Certificate)
+	caCertData := []byte(identity.CA)
 	for len(caCertData) != 0 {
 		var block *pem.Block
 		block, caCertData = pem.Decode(caCertData)
@@ -161,7 +166,7 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 	}
 
 	// Add the signing cert and private key
-	if err := signedData.AddSigner(cert, globalsign.NewSigner(h.ctx, h.signedBy), pkcs7.SignerInfoConfig{}); err != nil {
+	if err := signedData.AddSigner(cert, globalsign.NewSigner(h.ctx, h.manager, h.signer, h.identity), pkcs7.SignerInfoConfig{}); err != nil {
 		return err
 	}
 
@@ -184,9 +189,11 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 // NewGlobalSignDSS create custom unidoc sighandler which leverage globalsign DSS service
 // this handler assume that globalsign credential already have been set
 // please see globalsign.SetupCredential
-func NewGlobalSignDSS(ctx context.Context, signedBy string) (model.SignatureHandler, error) {
+func NewGlobalSignDSS(ctx context.Context, m *globalsign.Manager, signer string, identity map[string]interface{}) (model.SignatureHandler, error) {
 	return &GlobalsignDSS{
 		ctx:      ctx,
-		signedBy: signedBy,
+		manager:  m,
+		signer:   signer,
+		identity: identity,
 	}, nil
 }

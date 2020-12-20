@@ -4,12 +4,28 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 )
 
 // errors definition
 var (
 	ErrDigestRequired = errors.New("file digest required")
 )
+
+// DSSIdentity represent acquired credential
+// from login and identity request
+type DSSIdentity struct {
+	// Identity
+	ID string
+
+	SigningCert string
+
+	OCSP string
+
+	CA string
+
+	Ts time.Time
+}
 
 // IdentityRequest .
 type IdentityRequest struct {

@@ -9,8 +9,11 @@ import (
 // Signer implements custom crypto.Signer which utilize globalsign DSS API
 // to sign signature digest
 type Signer struct {
+	manager *Manager
+
 	// signer identification
-	signedBy string
+	signer   string
+	identity map[string]interface{}
 
 	// caller context
 	ctx context.Context
@@ -24,18 +27,20 @@ func (s *Signer) Public() crypto.PublicKey {
 // Sign request
 func (s *Signer) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	// get signature based on "signedBy" identification
-	result, err := GetSignature(s.ctx, s.signedBy, digest)
+	result, err := s.manager.Sign(s.ctx, s.signer, &IdentityRequest{SubjectDn: s.identity}, digest)
 	if err != nil {
 		return nil, err
 	}
 
-	return result.Signature, nil
+	return result, nil
 }
 
 // NewSigner create crypto.Signer implementation
-func NewSigner(ctx context.Context, signedBy string) crypto.Signer {
+func NewSigner(ctx context.Context, m *Manager, signer string, identity map[string]interface{}) crypto.Signer {
 	return &Signer{
 		ctx:      ctx,
-		signedBy: signedBy,
+		manager:  m,
+		signer:   signer,
+		identity: identity,
 	}
 }

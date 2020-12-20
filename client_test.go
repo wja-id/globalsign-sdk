@@ -2,12 +2,13 @@ package globalsign
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/wja-id/dokusign/lib/digest"
+	"time"
 )
 
 func TestSigning(t *testing.T) {
@@ -66,16 +67,11 @@ func TestSigning(t *testing.T) {
 	}
 	t.Logf("CA: %s", cert.CA)
 
-	// get digest of target file
-	digest, err := digest.FileSHA256Digest("../../input.pdf")
-	if err != nil {
-		t.Error(err)
-		t.Error("Digest() failed with code:", httpResp.StatusCode)
-		t.FailNow()
-	}
+	// mock digest
+	digest := sha256.Sum256([]byte(fmt.Sprintf("%x", time.Now().Unix())))
 
 	// encode to hex
-	digestHex := strings.ToUpper(hex.EncodeToString(digest))
+	digestHex := strings.ToUpper(hex.EncodeToString(digest[:]))
 
 	t.Logf("Digest: %s", digestHex)
 
