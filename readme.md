@@ -7,10 +7,24 @@ for [unidoc](https://unidoc.io "Unidoc website") integration see **integration**
 ```go 
 ...
 
-// Create signature handler.
-handler, err := integration.NewGlobalSignDSS(context.Background(), option.SignedBy)
+// create globalsign manager
+manager, err := globalsign.NewManager(&globalsign.ManagerOption{
+	APIKey:             "<API KEY>",
+	APISecret:          "<API SECRET>",
+	BaseURL:            "<BASE_URL>",
+	PrivateKeyPath:     "<KEY_PATH>",
+	TLSCertificatePath: "<CERT_PATH>",
+})
 if err != nil {
-    return err
+	return err
+}
+
+// Create signature handler.
+handler, err := integration.NewGlobalSignDSS(context.Background(), manager, option.SignedBy, map[string]interface{}{
+	"common_name": "Galih Rivanto"
+})
+if err != nil {
+	return err
 }
 
 // Create signature.
