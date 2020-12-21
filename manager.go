@@ -166,12 +166,14 @@ func NewManager(option *ManagerOption) (*Manager, error) {
 	}
 
 	client, err := New(httpClient, SetBaseURL(option.BaseURL))
-	if err == nil {
+	if err != nil {
 		return nil, err
 	}
 
 	return &Manager{
-		client: client,
-		vault:  NewIdentityVault(identityTTL),
+		apiKey:    option.APIKey,
+		apiSecret: option.APISecret,
+		client:    client,
+		vault:     NewIdentityVault(identityTTL),
 	}, nil
 }
