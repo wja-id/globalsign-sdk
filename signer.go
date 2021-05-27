@@ -3,8 +3,16 @@ package globalsign
 import (
 	"context"
 	"crypto"
+	"errors"
 	"io"
 )
+
+const (
+	RequestSign      = 1
+	RequestTimestamp = 2
+)
+
+var ErrInvalidRequestType = errors.New("invalid request type, supported: RequestSign and RequestTimestamp")
 
 // Signer implements custom crypto.Signer which utilize globalsign DSS API
 // to sign signature digest
@@ -27,12 +35,8 @@ func (s *Signer) Public() crypto.PublicKey {
 // Sign request
 func (s *Signer) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	// get signature based on "signedBy" identification
-	result, err := s.manager.Sign(s.ctx, s.signer, &IdentityRequest{SubjectDn: s.identity}, digest)
-	if err != nil {
-		return nil, err
-	}
+	return s.manager.Sign(s.ctx, s.signer, &IdentityRequest{SubjectDn: s.identity}, digest)
 
-	return result, nil
 }
 
 // NewSigner create crypto.Signer implementation

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -83,6 +84,8 @@ func (s *Manager) GetIdentity(ctx context.Context, signer string, req *IdentityR
 
 // Sign .
 func (s *Manager) Sign(ctx context.Context, signer string, identityReq *IdentityRequest, digest []byte) ([]byte, error) {
+	log.Println("request hash")
+
 	err := s.ensureToken(ctx)
 	if err != nil {
 		return nil, err
@@ -109,6 +112,8 @@ func (s *Manager) Sign(ctx context.Context, signer string, identityReq *Identity
 
 // Timestamp .
 func (s *Manager) Timestamp(ctx context.Context, signer string, identityReq *IdentityRequest, digest []byte) ([]byte, error) {
+	log.Println("request timestamp")
+
 	err := s.ensureToken(ctx)
 	if err != nil {
 		return nil, err

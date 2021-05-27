@@ -165,7 +165,6 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 		return err
 	}
 
-	// Add the signing cert and private key
 	if err := signedData.AddSigner(cert, globalsign.NewSigner(h.ctx, h.manager, h.signer, h.identity), pkcs7.SignerInfoConfig{}); err != nil {
 		return err
 	}
@@ -196,4 +195,64 @@ func NewGlobalSignDSS(ctx context.Context, m *globalsign.Manager, signer string,
 		signer:   signer,
 		identity: identity,
 	}, nil
+}
+
+// InitFunc allow customize pdf signature initialization
+type InitFunc func(model.SignatureHandler, *model.PdfSignature) error
+
+// SignFunc allow customize signing implementation
+type SignFunc func(model.SignatureHandler, *model.PdfSignature, model.Hasher) error
+
+type CustomHandler struct {
+	initFunc InitFunc
+	signFunc SignFunc
+}
+
+// NewDigest .
+func (h *CustomHandler) NewDigest(sig *model.PdfSignature) (model.Hasher, error) {
+	return bytes.NewBuffer(nil), nil
+}
+
+// IsApplicable .
+func (h *CustomHandler) IsApplicable(sig *model.PdfSignature) bool {
+	if sig == nil || sig.Filter == nil || sig.SubFilter == nil {
+		return false
+	}
+
+	return (*sig.Filter == "Adobe.PPKMS" || *sig.Filter == "Adobe.PPKLite") && *sig.SubFilter == "adbe.pkcs7.detached"
+}
+
+// InitSignature .
+func (h *CustomHandler) InitSignature(sig *model.PdfSignature) error {
+	if h.initFunc != nil {
+		return h.initFunc(h, sig)
+	}
+
+	return nil
+}
+
+// Sign .
+func (h *CustomHandler) Sign(sig *model.PdfSignature, digest model.Hasher) error {
+	if h.signFunc != nil {
+		return h.signFunc(h, sig, digest)
+	}
+
+	return nil
+}
+
+// Validate .
+func (h *CustomHandler) Validate(sig *model.PdfSignature, digest model.Hasher) (model.SignatureValidationResult, error) {
+
+	return model.SignatureValidationResult{
+		IsSigned:   true,
+		IsVerified: true,
+	}, nil
+}
+
+// NewCustomHandler allow client to implement their own init and sign function
+func NewCustomHandler(initFunc InitFunc, signFunc SignFunc) model.SignatureHandler {
+	return &CustomHandler{
+		initFunc: initFunc,
+		signFunc: signFunc,
+	}
 }
