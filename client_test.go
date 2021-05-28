@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/github/ietf-cms/timestamp"
+	"github.com/unidoc/timestamp"
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -149,7 +149,7 @@ func TestSigning(t *testing.T) {
 	}
 	t.Logf("Timestamp: %s", string(decodedTs))
 
-	tsResp, err := timestamp.ParseResponse(decodedTs)
+	tsResp, err := timestamp.Parse(decodedTs)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()

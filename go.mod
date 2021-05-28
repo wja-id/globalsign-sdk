@@ -2,6 +2,8 @@ module github.com/wja-id/globalsign-sdk
 
 go 1.15
 
+replace github.com/unidoc/unipdf/v3 => /home/galih/go/src/github.com/wja-id/pkcs7
+
 require (
 	github.com/digitorus/timestamp v0.0.0-20210102082646-54ddd7720e27 // indirect
 	github.com/github/ietf-cms v0.1.0 // indirect
