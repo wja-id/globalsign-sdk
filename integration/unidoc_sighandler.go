@@ -3,10 +3,14 @@ package integration
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/x509"
+	"encoding/asn1"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/unidoc/unipdf/v3/core"
 	"github.com/unidoc/unipdf/v3/model"
@@ -16,11 +20,49 @@ import (
 
 const sigLen = 8192
 
+// SignerCallback .
+type SignerCallback func(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error)
+
+// Signer implements custom crypto.Signer which utilize globalsign DSS API
+// to sign signature digest
+type Signer struct {
+	// sign callback
+	callback SignerCallback
+}
+
+func (s *Signer) EncryptionAlgorithmOID() asn1.ObjectIdentifier {
+	return pkcs7.OIDEncryptionAlgorithmRSASHA256
+}
+
+// Public .
+func (s *Signer) Public() crypto.PublicKey {
+	return nil
+}
+
+// Sign request
+func (s *Signer) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+	if s.callback == nil {
+		return nil, errors.New("signer func not implemented")
+	}
+
+	return s.callback(rand, digest, opts)
+}
+
+// NewSigner create crypto.Signer implementation
+func NewSigner(cb SignerCallback) crypto.Signer {
+	return &Signer{
+		callback: cb,
+	}
+}
+
 // GlobalsignDSS is custom unidoc sighandler which leverage
 // globalsign DSS service
 type GlobalsignDSS struct {
 	signer   string
 	identity map[string]interface{}
+
+	// ocsp retrieved during identity request
+	ocsp []byte
 
 	manager *globalsign.Manager
 
@@ -28,7 +70,7 @@ type GlobalsignDSS struct {
 	ctx context.Context
 }
 
-func (h *GlobalsignDSS) getCertificate(sig *model.PdfSignature) (*x509.Certificate, error) {
+func (h *GlobalsignDSS) getCertificates(sig *model.PdfSignature) ([]*x509.Certificate, error) {
 
 	var certData []byte
 	switch certObj := sig.Cert.(type) {
@@ -54,7 +96,7 @@ func (h *GlobalsignDSS) getCertificate(sig *model.PdfSignature) (*x509.Certifica
 		return nil, err
 	}
 
-	return certs[0], nil
+	return certs, nil
 }
 
 // IsApplicable .
@@ -82,6 +124,12 @@ func (h *GlobalsignDSS) InitSignature(sig *model.PdfSignature) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// OCSP Response in base64 format
+	h.ocsp, err = base64.StdEncoding.DecodeString(identity.OCSP)
+	if err != nil {
+		return fmt.Errorf("invalid ocsp response, err: %v", err)
 	}
 
 	// create certificate chain
@@ -159,14 +207,52 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 	// set digest algorithm which supported by globalsign
 	signedData.SetDigestAlgorithm(pkcs7.OIDDigestAlgorithmSHA256)
 
-	// get certificate
-	cert, err := h.getCertificate(sig)
+	// get certificate chain
+	certs, err := h.getCertificates(sig)
 	if err != nil {
 		return err
 	}
 
-	if err := signedData.AddSigner(cert, globalsign.NewSigner(h.ctx, h.manager, h.signer, h.identity), pkcs7.SignerInfoConfig{}); err != nil {
-		return err
+	var timestampToken []byte
+
+	// callback
+	cb := func(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+		// request timestamp token
+		t, err := h.manager.Timestamp(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, digest)
+		if err != nil {
+			return nil, err
+		}
+		timestampToken = t
+
+		// sign digest
+		signature, err := h.manager.Sign(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, digest)
+		if err != nil {
+			return nil, err
+		}
+
+		return signature, nil
+	}
+
+	// if contains certificate chains
+	if len(certs) > 1 {
+		err = signedData.AddSignerChain(certs[0], NewSigner(cb), certs[1:], pkcs7.SignerInfoConfig{})
+		if err != nil {
+			return err
+		}
+	} else if len(certs) == 1 {
+		err = signedData.AddSigner(certs[0], NewSigner(cb), pkcs7.SignerInfoConfig{})
+		if err != nil {
+			return err
+		}
+	}
+
+	// after signer has been registered, add timestamp token
+	if len(timestampToken) != 0 {
+		// add timestamp token to first signer
+		err = signedData.AddTimestampTokenToSigner(0, timestampToken)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Call Detach() is you want to remove content from the signature
