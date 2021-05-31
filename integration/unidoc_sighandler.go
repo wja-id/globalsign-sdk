@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 
 	"github.com/unidoc/unipdf/v3/core"
 	"github.com/unidoc/unipdf/v3/model"
@@ -55,6 +56,10 @@ func NewSigner(cb SignerCallback) crypto.Signer {
 	}
 }
 
+type CertificateChainGetter interface {
+	GetCertificateChain() []*x509.Certificate
+}
+
 // GlobalsignDSS is custom unidoc sighandler which leverage
 // globalsign DSS service
 type GlobalsignDSS struct {
@@ -62,12 +67,17 @@ type GlobalsignDSS struct {
 	identity map[string]interface{}
 
 	// ocsp retrieved during identity request
-	ocsp []byte
+	ocsp      []byte
+	certChain []*x509.Certificate
 
 	manager *globalsign.Manager
 
 	// a caller context
 	ctx context.Context
+}
+
+func (h *GlobalsignDSS) GetCertificateChain() []*x509.Certificate {
+	return h.certChain
 }
 
 func (h *GlobalsignDSS) getCertificates(sig *model.PdfSignature) ([]*x509.Certificate, error) {
@@ -166,6 +176,7 @@ func (h *GlobalsignDSS) InitSignature(sig *model.PdfSignature) error {
 
 		certChain = append(certChain, issuer)
 	}
+	h.certChain = certChain
 
 	// Create PDF array object which will contain the certificate chain data
 	pdfCerts := core.MakeArray()
@@ -233,14 +244,24 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 		return signature, nil
 	}
 
+	siConfig := pkcs7.SignerInfoConfig{}
+	if len(h.ocsp) != 0 {
+		siConfig.ExtraSignedAttributes = []pkcs7.Attribute{
+			{
+				Type:  pkcs7.OIDAttributeAdobeRevocation,
+				Value: h.ocsp,
+			},
+		}
+	}
+
 	// if contains certificate chains
 	if len(certs) > 1 {
-		err = signedData.AddSignerChain(certs[0], NewSigner(cb), certs[1:], pkcs7.SignerInfoConfig{})
+		err = signedData.AddSignerChain(certs[0], NewSigner(cb), certs[1:], siConfig)
 		if err != nil {
 			return err
 		}
 	} else if len(certs) == 1 {
-		err = signedData.AddSigner(certs[0], NewSigner(cb), pkcs7.SignerInfoConfig{})
+		err = signedData.AddSigner(certs[0], NewSigner(cb), siConfig)
 		if err != nil {
 			return err
 		}
@@ -248,6 +269,8 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 
 	// after signer has been registered, add timestamp token
 	if len(timestampToken) != 0 {
+		log.Println("add timestamp token")
+
 		// add timestamp token to first signer
 		err = signedData.AddTimestampTokenToSigner(0, timestampToken)
 		if err != nil {
