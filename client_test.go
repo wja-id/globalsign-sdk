@@ -3,12 +3,18 @@ package globalsign
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/unidoc/timestamp"
+	"golang.org/x/crypto/ocsp"
 )
 
 func TestSigning(t *testing.T) {
@@ -67,6 +73,56 @@ func TestSigning(t *testing.T) {
 	}
 	t.Logf("CA: %s", cert.CA)
 
+	// create certificate chain
+	// from signing and ca cert
+	var certChain []*x509.Certificate
+	issuerCertData := []byte(identity.SigningCert)
+	for len(issuerCertData) != 0 {
+		var block *pem.Block
+		block, issuerCertData = pem.Decode(issuerCertData)
+		if block == nil {
+			break
+		}
+
+		issuer, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
+
+		certChain = append(certChain, issuer)
+	}
+
+	caCertData := []byte(cert.CA)
+	for len(caCertData) != 0 {
+		var block *pem.Block
+		block, caCertData = pem.Decode(caCertData)
+		if block == nil {
+			break
+		}
+
+		issuer, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
+
+		certChain = append(certChain, issuer)
+	}
+
+	ocspDecoded, err := base64.StdEncoding.DecodeString(identity.OCSPResponse)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	ocspResponse, err := ocsp.ParseResponse(ocspDecoded, certChain[1])
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	t.Logf("OCSP: %v", ocspResponse)
+
 	// mock digest
 	digest := sha256.Sum256([]byte(fmt.Sprintf("%x", time.Now().Unix())))
 
@@ -76,7 +132,7 @@ func TestSigning(t *testing.T) {
 	t.Logf("Digest: %s", digestHex)
 
 	// get timestamp
-	timestamp, httpResp, err := c.DigitalSigningService.Timestamp(context.Background(), &TimestampRequest{
+	timestampResp, httpResp, err := c.DigitalSigningService.Timestamp(context.Background(), &TimestampRequest{
 		Digest: digestHex,
 	})
 	if err != nil {
@@ -84,8 +140,22 @@ func TestSigning(t *testing.T) {
 		t.Error("Timestamp() failed with code:", httpResp.StatusCode)
 		t.FailNow()
 	}
+	t.Logf("Timestamp: %s", timestampResp.Token)
 
-	t.Logf("Timestamp Token: %s", timestamp.Token)
+	decodedTs, err := base64.StdEncoding.DecodeString(timestampResp.Token)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	t.Logf("Timestamp: %s", string(decodedTs))
+
+	tsResp, err := timestamp.Parse(decodedTs)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	t.Logf("Timestamp Token: %v", tsResp)
 
 	// get signature
 	signature, httpResp, err := c.DigitalSigningService.Sign(context.Background(), &SigningRequest{
