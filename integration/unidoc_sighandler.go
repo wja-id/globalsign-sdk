@@ -32,7 +32,7 @@ type Signer struct {
 }
 
 func (s *Signer) EncryptionAlgorithmOID() asn1.ObjectIdentifier {
-	return pkcs7.OIDEncryptionAlgorithmRSASHA256
+	return pkcs7.OIDEncryptionAlgorithmRSA
 }
 
 // Public .
@@ -178,14 +178,14 @@ func (h *GlobalsignDSS) InitSignature(sig *model.PdfSignature) error {
 	}
 	h.certChain = certChain
 
-	// Create PDF array object which will contain the certificate chain data
-	pdfCerts := core.MakeArray()
-	for _, cert := range certChain {
-		pdfCerts.Append(core.MakeString(string(cert.Raw)))
-	}
+	// // Create PDF array object which will contain the certificate chain data
+	// pdfCerts := core.MakeArray()
+	// for _, cert := range certChain {
+	// 	pdfCerts.Append(core.MakeString(string(cert.Raw)))
+	// }
 
-	// append cert to signature
-	sig.Cert = pdfCerts
+	// // append cert to signature
+	// sig.Cert = pdfCerts
 
 	handler := *h
 	sig.Handler = &handler
@@ -219,11 +219,7 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 	signedData.SetDigestAlgorithm(pkcs7.OIDDigestAlgorithmSHA256)
 
 	// get certificate chain
-	certs, err := h.getCertificates(sig)
-	if err != nil {
-		return err
-	}
-
+	certs := h.GetCertificateChain()
 	var timestampToken []byte
 
 	// callback
@@ -231,6 +227,7 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 		// request timestamp token
 		t, err := h.manager.Timestamp(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, digest)
 		if err != nil {
+			log.Println("ts err", err)
 			return nil, err
 		}
 		timestampToken = t
@@ -238,6 +235,7 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 		// sign digest
 		signature, err := h.manager.Sign(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, digest)
 		if err != nil {
+			log.Println("signature err", err)
 			return nil, err
 		}
 
@@ -249,7 +247,7 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 		siConfig.ExtraSignedAttributes = []pkcs7.Attribute{
 			{
 				Type:  pkcs7.OIDAttributeAdobeRevocation,
-				Value: h.ocsp,
+				Value: asn1.RawValue{FullBytes: h.ocsp},
 			},
 		}
 	}
@@ -269,8 +267,6 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 
 	// after signer has been registered, add timestamp token
 	if len(timestampToken) != 0 {
-		log.Println("add timestamp token")
-
 		// add timestamp token to first signer
 		err = signedData.AddTimestampTokenToSigner(0, timestampToken)
 		if err != nil {
