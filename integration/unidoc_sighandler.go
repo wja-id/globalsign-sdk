@@ -17,6 +17,7 @@ import (
 	"github.com/unidoc/unipdf/v3/model"
 	globalsign "github.com/wja-id/globalsign-sdk"
 	"github.com/wja-id/pkcs7"
+	"golang.org/x/crypto/ocsp"
 )
 
 const sigLen = 8192
@@ -178,14 +179,14 @@ func (h *GlobalsignDSS) InitSignature(sig *model.PdfSignature) error {
 	}
 	h.certChain = certChain
 
-	// // Create PDF array object which will contain the certificate chain data
-	// pdfCerts := core.MakeArray()
-	// for _, cert := range certChain {
-	// 	pdfCerts.Append(core.MakeString(string(cert.Raw)))
-	// }
+	// Create PDF array object which will contain the certificate chain data
+	pdfCerts := core.MakeArray()
+	for _, cert := range certChain {
+		pdfCerts.Append(core.MakeString(string(cert.Raw)))
+	}
 
-	// // append cert to signature
-	// sig.Cert = pdfCerts
+	// append cert to signature
+	sig.Cert = pdfCerts
 
 	handler := *h
 	sig.Handler = &handler
@@ -220,18 +221,9 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 
 	// get certificate chain
 	certs := h.GetCertificateChain()
-	var timestampToken []byte
 
 	// callback
 	cb := func(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
-		// request timestamp token
-		t, err := h.manager.Timestamp(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, digest)
-		if err != nil {
-			log.Println("ts err", err)
-			return nil, err
-		}
-		timestampToken = t
-
 		// sign digest
 		signature, err := h.manager.Sign(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, digest)
 		if err != nil {
@@ -244,10 +236,21 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 
 	siConfig := pkcs7.SignerInfoConfig{}
 	if len(h.ocsp) != 0 {
+
+		// verify ocsp response
+		_, err := ocsp.ParseResponseForCert(h.ocsp, certs[0], certs[1])
+		if err != nil {
+			return err
+		}
+
 		siConfig.ExtraSignedAttributes = []pkcs7.Attribute{
 			{
-				Type:  pkcs7.OIDAttributeAdobeRevocation,
-				Value: asn1.RawValue{FullBytes: h.ocsp},
+				Type: pkcs7.OIDAttributeAdobeRevocation,
+				Value: pkcs7.RevocationInfoArchival{
+					Ocsp: []asn1.RawValue{
+						{FullBytes: h.ocsp},
+					},
+				},
 			},
 		}
 	}
@@ -265,13 +268,19 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 		}
 	}
 
-	// after signer has been registered, add timestamp token
-	if len(timestampToken) != 0 {
-		// add timestamp token to first signer
-		err = signedData.AddTimestampTokenToSigner(0, timestampToken)
+	// add timestamp token to first signer
+	err = signedData.RequestSignerTimestampToken(0, func(digest []byte) ([]byte, error) {
+		// request timestamp token
+		t, err := h.manager.Timestamp(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, digest)
 		if err != nil {
-			return err
+			log.Println("ts err", err)
+			return nil, err
 		}
+
+		return t, nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// Call Detach() is you want to remove content from the signature
@@ -282,6 +291,10 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 	if err != nil {
 		return err
 	}
+
+	log.Println("signature:")
+
+	log.Println(base64.StdEncoding.EncodeToString(detachedSignature))
 
 	data := make([]byte, sigLen)
 	copy(data, detachedSignature)

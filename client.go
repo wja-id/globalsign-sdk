@@ -227,7 +227,7 @@ type ErrorResponse struct {
 }
 
 func (r *ErrorResponse) Error() string {
-	return fmt.Sprintf("%d %v", r.Response.StatusCode, r.Message)
+	return fmt.Sprintf("%d. message: %v", r.Response.StatusCode, r.Message)
 }
 
 // ValidationError contains field to field validation error message

@@ -121,10 +121,11 @@ func (s *Manager) Timestamp(ctx context.Context, signer string, identityReq *Ide
 	// encode to hex
 	digestHex := strings.ToUpper(hex.EncodeToString(digest))
 
-	timestampResp, _, err := s.client.DigitalSigningService.Timestamp(ctx, &TimestampRequest{
+	timestampResp, httpResp, err := s.client.DigitalSigningService.Timestamp(ctx, &TimestampRequest{
 		Digest: digestHex,
 	})
 	if err != nil {
+		log.Println("TS err:", httpResp.Header)
 		return nil, err
 	}
 
