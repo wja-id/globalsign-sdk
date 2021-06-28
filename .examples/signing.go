@@ -12,14 +12,13 @@ import (
 
 	"github.com/unidoc/unipdf/v3/annotator"
 	"github.com/unidoc/unipdf/v3/core"
-	"github.com/unidoc/unipdf/v3/model"
 	pdf "github.com/unidoc/unipdf/v3/model"
 )
 
 // default tool creator information
 var (
-	ToolCreatorInfo = "TEMS"
-	ToolAuthorInfo  = "TEMS"
+	ToolCreatorInfo = "pdf-signer"
+	ToolAuthorInfo  = "pdf-signer"
 )
 
 func init() {
@@ -131,9 +130,9 @@ func loadCertificates(certData string) (*x509.Certificate, *core.PdfObjectArray,
 	return signingCert, pdfCerts, nil
 }
 
-func createSignatureField(option *SignOption, handler model.SignatureHandler, certChain ...*x509.Certificate) (*model.PdfFieldSignature, error) {
+func createSignatureField(option *SignOption, handler pdf.SignatureHandler, certChain ...*x509.Certificate) (*pdf.PdfFieldSignature, error) {
 	// Create signature.
-	signature := model.NewPdfSignature(handler)
+	signature := pdf.NewPdfSignature(handler)
 
 	if len(certChain) > 0 {
 		// Create PDF array object which will contain the certificate chain data,
