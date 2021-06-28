@@ -67,12 +67,18 @@ type CertificateResponse struct {
 	CA string `json:"path"`
 }
 
+// TrusChainResponse .
+type TrustChainResponse struct {
+	Path string `json:"path"`
+}
+
 // DigitalSigningService .
 type DigitalSigningService interface {
 	Identity(context.Context, *IdentityRequest) (*IdentityResponse, *Response, error)
 	Timestamp(context.Context, *TimestampRequest) (*TimestampResponse, *Response, error)
 	Sign(context.Context, *SigningRequest) (*SigningResponse, *Response, error)
 	CertificatePath(context.Context) (*CertificateResponse, *Response, error)
+	TrustChain(context.Context) (*TrustChainResponse, *Response, error)
 }
 
 type digitalSigningService struct {
@@ -143,6 +149,22 @@ func (s *digitalSigningService) CertificatePath(ctx context.Context) (*Certifica
 	}
 
 	result := new(CertificateResponse)
+	resp, err := s.client.Do(ctx, r, result)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return result, resp, nil
+}
+
+func (s *digitalSigningService) TrustChain(ctx context.Context) (*TrustChainResponse, *Response, error) {
+	path := baseAPI + "/certificate_path"
+	r, err := s.client.NewRequest(ctx, http.MethodGet, path, struct{}{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result := new(TrustChainResponse)
 	resp, err := s.client.Do(ctx, r, result)
 	if err != nil {
 		return nil, resp, err
