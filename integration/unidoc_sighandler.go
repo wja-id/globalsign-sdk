@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -247,9 +249,11 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 			{
 				Type: pkcs7.OIDAttributeAdobeRevocation,
 				Value: pkcs7.RevocationInfoArchival{
+					Crl: []asn1.RawValue{},
 					Ocsp: []asn1.RawValue{
 						{FullBytes: h.ocsp},
 					},
+					OtherRevInfo: []asn1.RawValue{},
 				},
 			},
 		}
@@ -270,8 +274,14 @@ func (h *GlobalsignDSS) Sign(sig *model.PdfSignature, digest model.Hasher) error
 
 	// add timestamp token to first signer
 	err = signedData.RequestSignerTimestampToken(0, func(digest []byte) ([]byte, error) {
+		hasher := sha256.New()
+		hasher.Write(digest)
+
+		messageImprint := hasher.Sum(nil)
+		log.Println("tsa imprint:", hex.EncodeToString(messageImprint))
+
 		// request timestamp token
-		t, err := h.manager.Timestamp(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, digest)
+		t, err := h.manager.Timestamp(h.ctx, h.signer, &globalsign.IdentityRequest{SubjectDn: h.identity}, hasher.Sum(nil))
 		if err != nil {
 			log.Println("ts err", err)
 			return nil, err

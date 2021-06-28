@@ -177,4 +177,13 @@ func TestSigning(t *testing.T) {
 	}
 
 	t.Logf("Signature: %s", string(signatureHash))
+
+	trustChain, _, err := c.DigitalSigningService.TrustChain(context.Background())
+	if err != nil {
+		t.Error(err)
+		t.Error("TrusChain() failed with code:", httpResp.StatusCode)
+		t.FailNow()
+	}
+
+	t.Logf("Trust Chain: %v", trustChain.Path)
 }
