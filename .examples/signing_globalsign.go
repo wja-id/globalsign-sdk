@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/x509"
-	"errors"
 	"log"
 	"time"
 
@@ -50,28 +49,13 @@ func (s *globalsignDssSigner) Sign(ctx context.Context, rd *model.PdfReader, opt
 		return nil, err
 	}
 
-	if isEncrypted {
-		log.Println("pdf is encrypted")
-		auth, err := rd.Decrypt([]byte(option.Password))
-		if err != nil {
-			return nil, err
-		}
-		if !auth {
-			return nil, errors.New("cannot open encrypted document, please specify password in option")
-		}
-	}
-
-	isEncrypted, err = rd.IsEncrypted()
-	if err != nil {
-		return nil, err
-	}
-
 	log.Println("pdf is encrypted?", isEncrypted)
 
 	ap, err := model.NewPdfAppender(rd)
 	if err != nil {
 		return nil, err
 	}
+	//}
 
 	signerIdentity := map[string]interface{}{
 		"common_name": option.Fullname,
