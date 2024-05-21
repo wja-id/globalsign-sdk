@@ -491,14 +491,19 @@ func mergeQueries(queries ...url.Values) url.Values {
 }
 
 // NewHTTPClientWithCertificate .
-func NewHTTPClientWithCertificate(certPath, keyPath string) (*http.Client, error) {
+func NewHTTPClientWithCertificate(certPath, keyPath string, options ...bool) (*http.Client, error) {
+	insecureSkipVerify := true
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return nil, err
 	}
 
+	if len(options) > 0 {
+		insecureSkipVerify = options[0]
+	}
+
 	config := &tls.Config{
-		InsecureSkipVerify:       true,
+		InsecureSkipVerify:       insecureSkipVerify,
 		MinVersion:               tls.VersionTLS12,
 		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
 		PreferServerCipherSuites: true,

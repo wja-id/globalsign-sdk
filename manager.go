@@ -23,6 +23,7 @@ type ManagerOption struct {
 	APISecret          string
 	TLSCertificatePath string
 	PrivateKeyPath     string
+	InsecureSkipVerify bool
 }
 
 // Valid determine whether option is valid
@@ -166,7 +167,7 @@ func NewManager(option *ManagerOption) (*Manager, error) {
 	}
 
 	// create a client
-	httpClient, err := NewHTTPClientWithCertificate(option.TLSCertificatePath, option.PrivateKeyPath)
+	httpClient, err := NewHTTPClientWithCertificate(option.TLSCertificatePath, option.PrivateKeyPath, option.InsecureSkipVerify)
 	if err != nil {
 		return nil, err
 	}
